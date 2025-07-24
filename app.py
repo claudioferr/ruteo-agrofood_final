@@ -15,10 +15,11 @@ archivo = st.file_uploader("📤 Sube el archivo Excel con los pedidos", type=["
 if archivo:
     df = pd.read_excel(archivo)
 
-    # Normalizar columnas
+    # Normalizar nombres de columnas
     df.columns = df.columns.str.strip().str.lower().str.normalize('NFKD') \
         .str.encode('ascii', errors='ignore').str.decode('utf-8')
 
+    # Conversión de tipos
     df["direccion"] = df["direccion"].fillna("").astype(str)
     df["cliente"] = df["cliente"].astype(str)
     df["latitud"] = df["latitud"].astype(float)
@@ -27,6 +28,7 @@ if archivo:
     total_pedidos = len(df)
     capacidad = {"1": 45, "2": 45, "3": 30}
 
+    # Asignación automática si falta columna furgón
     if "furgon" not in df.columns or df["furgon"].isnull().all():
         if total_pedidos <= capacidad["1"]:
             usados = ["1"]
@@ -52,23 +54,33 @@ if archivo:
 
         df["furgon"] = asignaciones
 
-    # Editor para modificar furgones
+    # Editor con selector
     st.markdown("### ✏️ Editar asignación de clientes a furgones")
-    df_editable = st.data_editor(df.copy(), num_rows="dynamic")
+    df_editable = st.data_editor(
+        df.copy(),
+        num_rows="dynamic",
+        column_config={
+            "furgon": st.column_config.SelectboxColumn(
+                "Furgón",
+                help="Asignar furgón (1, 2 o 3)",
+                options=["1", "2", "3"]
+            )
+        }
+    )
     df_editable["furgon"] = df_editable["furgon"].astype(str)
 
-    # Filtrar por furgón
+    # Filtro visual por furgón
     furgones_disponibles = sorted(df_editable["furgon"].unique())
     filtro_furgon = st.multiselect("🚚 Filtrar por furgón para visualizar en el mapa:", furgones_disponibles, default=furgones_disponibles)
     df_filtrado = df_editable[df_editable["furgon"].isin(filtro_furgon)]
 
-    # Agrupación para mapa
+    # Agrupar por ubicación
     df_grouped = df_filtrado.groupby(["latitud", "longitud", "furgon"]).agg({
         "cliente": "count",
         "direccion": "first"
     }).reset_index().rename(columns={"cliente": "pedidos"})
 
-    # Crear mapa
+    # Mapa
     mapa = folium.Map(location=[LAT_ORIGEN, LON_ORIGEN], zoom_start=12)
     colores = {"1": "red", "2": "blue", "3": "green"}
 
